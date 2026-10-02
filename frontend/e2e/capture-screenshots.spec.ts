@@ -12,7 +12,7 @@ import {
 
 const DEST = path.join(__dirname, "../../docs/screenshots");
 
-test("capture showcase screenshots", async ({ page }) => {
+test("capture documentation screenshots", async ({ page }) => {
   test.skip(process.env.CAPTURE_SCREENSHOTS !== "1", "set CAPTURE_SCREENSHOTS=1 to write PNG files");
 
   resetDemo();

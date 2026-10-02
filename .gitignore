@@ -24,21 +24,33 @@ node_modules/
 .next/
 out/
 *.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 frontend/playwright-report/
 frontend/test-results/
 frontend/blob-report/
+frontend/playwright/.cache/
 
 # Local E2E and logs
 .e2e-logs/
 *.log
+
+# Local demo recordings (do not commit raw video)
+docs/showcase/*.mp4
+docs/showcase/*.webm
+docs/showcase/recordings/
 
 # Local data
 *.sqlite
 *.db
 dump.rdb
 
-# IDE / OS
+# IDE / OS / editor leftovers
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+*~

@@ -67,4 +67,4 @@ FastAPI dependencies: `get_current_user`, `require_workspace`, `require_roles(*r
 
 ## Operator attribution
 
-Approval and audit use `actor_user_id` from the JWT. The `X-Operator` header is removed as an identity source.
+Approval and audit use `actor_user_id` from the JWT. Operator identity is never taken from a free-text request header.

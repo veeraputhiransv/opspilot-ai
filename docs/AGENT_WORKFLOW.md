@@ -2,9 +2,11 @@
 
 The investigation is one LangGraph. Nodes are specialized and run in a fixed order. A node does not choose the next node, except the single policy gate that either waits for a human or resolves.
 
-Tenancy: the graph is invoked with `incident_id`. Every load and write is in that incident’s workspace. Tools receive `workspace_id` through the execution context. Production auth is described in [AUTH.md](AUTH.md); this file does not define login.
+Tenancy: the graph is invoked with `incident_id`. Every load and write is in that incident’s workspace. Tools receive `workspace_id` through the execution context. Production auth is described in [AUTH.md](AUTH.md).
 
-The LinkedIn pool-exhaustion story below is a **test and later seed scenario**. It is not the default product configuration.
+LangGraph’s built-in checkpointer is not used. Hiding approval inside framework memory would make the console, tests, and audit lie. Postgres approvals and checkpoints are the authority.
+
+The payment-service pool-exhaustion story below is a **test and demo scenario**. It is not the default product configuration.
 
 ```mermaid
 flowchart TD
@@ -35,6 +37,16 @@ flowchart TD
   B -->|only optional follow-ups left| E
 ```
 
+## Lifecycle of one incident
+
+1. Ingest authenticates a workspace API key or an operator JWT, writes `incident_events` + `incidents` in that workspace, publishes SSE, returns 202.
+2. Worker starts (or resumes) the graph with `incident_id` only. Nodes load state from Postgres, not from the HTTP request.
+3. Each node: run tools or reasoner → persist rows → timeline → SSE wake-up → next node.
+4. Policy writes risk and approval rows. Execution runs only what policy allows.
+5. If anything still needs a human, the graph **returns**. Checkpoint stores cursor. Approvals table is authority.
+6. `POST /approvals/{id}/approve` by an `operator+` user row-locks, writes decision, resumes worker.
+7. Execution records `tool_calls`. Mitigating success → resolve → RCA → index knowledge in the same workspace.
+
 ## What each node does
 
 | Node | Work | Side effects |
@@ -55,9 +67,49 @@ flowchart TD
 
 ## State
 
-`IncidentState` is a TypedDict carried by the graph: incident id, event, evidence lists, hypotheses, recommended actions, flags for approval and auto-resolve, model name, token counts, errors.
+`IncidentState` is a TypedDict carried by the graph: incident id, event, evidence lists, hypotheses, planned actions, flags for approval and auto-resolve, model name, token counts, errors.
 
 The UI does not read this dict. It reads tables. Each node commits before the graph continues, so a refresh mid-run shows partial progress.
+
+Console states are incident status plus approval status. There is no `AI_ACTIVE` chat state. The analogous flags are graph running vs paused vs executing vs resolved.
+
+Low confidence does not auto-execute HIGH tools. It can add a timeline warning and still require approval.
+
+## Hypothesis confidence
+
+OpsPilot persists multiple ranked hypotheses per incident. Each row stores title, description, `confidence` in `[0, 1]`, evidence IDs, and short evidence bullets.
+
+`confidence` is a **deterministic reasoner score** (weighted evidence signals in `DeterministicReasoner`). It is not a calibrated probability and is not model self-reported confidence. The UI labels it as an investigation score, not statistical certainty.
+
+Historical retrieval may support a hypothesis as evidence. Retrieval never authorizes a tool.
+
+## Logs as evidence
+
+Log lines retrieved during investigation are **evidence**, not instructions.
+
+The graph must not treat log `message` text as a tool call, policy override, or repository/channel/service selector. `looks_like_injection` flags instruction-like phrases. Flagged lines remain visible to operators and are stored as evidence summaries. They never authorize `rollback_deployment` or any other tool. `RiskPolicyService` remains code.
+
+## Reasoning provider
+
+```python
+class ReasoningProvider(Protocol):
+    name: str
+    async def severity(self, event: TriageInput) -> SeverityResult: ...
+    async def hypotheses(self, evidence: EvidenceBundle) -> list[Hypothesis]: ...
+    async def plan(self, primary: Hypothesis) -> list[ProposedAction]: ...
+    async def rca(self, incident: RcaInput) -> RcaSections: ...
+```
+
+Implementations:
+
+- `DeterministicReasoner` — default. Signal weights in code. Required for CI.
+- `HybridReasoner` — deterministic control plane; optional LLM rewrites narrative fields only.
+
+`LlmClient` is not allowed to call the tool registry.
+
+## Tool registry
+
+Tools have a name, Pydantic args (`extra=forbid`), risk declared in policy (not in the tool), and an async `execute(ctx, args)`. Context includes workspace_id, incident_id, integration bundle, and clock. The model emits structured `{name, arguments}` only for planner output that is then validated; it never receives HTTP clients.
 
 ## Demo storyline (database connection pool)
 

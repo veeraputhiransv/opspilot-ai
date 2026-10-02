@@ -10,7 +10,7 @@ Base path: `/api/v1`. OpenAPI at `/docs`. Errors:
 
 Times are ISO-8601 with timezone. Field names are snake_case.
 
-This document replaces the open-demo auth described in the old API sketch. See [AUTH.md](AUTH.md).
+See [AUTH.md](AUTH.md) for tokens and RBAC.
 
 ## Auth
 
@@ -25,11 +25,33 @@ This document replaces the open-demo auth described in the old API sketch. See [
 
 ## Ingest
 
-`POST /events` → `202` with workspace API key or operator JWT.
+`POST /events` → `202` (or `200` if replayed) with a workspace API key or an operator JWT.
 
-Body unchanged: `service`, `environment`, `event_type`, `error_rate`, `message`, `timestamp`. `extra=forbid`. Response: incident id and number.
+Body: `service`, `environment`, `event_type`, `error_rate`, `message`, `timestamp`. `extra=forbid`. Response: incident id and number.
 
-`GET /demo/scenarios` is **removed until phase 23**. Development uses eval fixtures in pytest, not a public scenario endpoint that implies the product is a scripted demo.
+### Idempotency
+
+1. If the client sends `idempotency_key` (1–128 characters), that value is used as-is for the workspace.
+2. Otherwise OpsPilot hashes:
+
+`workspace_id | service | environment | event_type | error_rate | message | timestamp`
+
+The pair `(workspace_id, idempotency_key)` is unique on `incident_events`.
+
+A second request with the same key returns the original incident (`replayed: true`) and **does not** start another graph run. A different key always creates a new incident.
+
+This is ingest-level idempotency, not alert-correlation across distinct outages.
+
+## Demo scenarios (opt-in)
+
+Available only when `OPSPILOT_DEMO_SEED_ENABLED=true` and the token is the AcmeFlow demo workspace.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/demo/scenarios` | Catalog of fictional scenarios |
+| POST | `/demo/scenarios/{key}/trigger` | Ingest that scenario as a real incident |
+
+See [DEMO.md](DEMO.md).
 
 ## Incidents
 
@@ -58,7 +80,7 @@ No generic tool-execute endpoint.
 
 ## Knowledge, dashboard, settings, stream
 
-Existing read routes remain, workspace-scoped. Settings writes are admin+. SSE uses the access token (`Authorization` or `access_token` query for EventSource).
+Existing read routes remain, workspace-scoped. Settings writes are admin+. SSE uses a short-lived stream ticket (`POST /realtime/tickets`, then `GET /events/stream?ticket=...`). Access JWTs are not accepted in the query string.
 
 ## Health
 

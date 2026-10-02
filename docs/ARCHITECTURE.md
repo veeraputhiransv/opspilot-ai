@@ -5,41 +5,39 @@
 
 OpsPilot is a modular monolith that turns a production event into a governed investigation: triage, evidence, hypotheses, a risk-classified action plan, human approval, execution, resolution, and RCA. It is not a customer-support chatbot and it is not a free-form tool loop.
 
-This document records the architecture for the **production product**. A seeded demo workspace is a late phase. It must not define the domain model.
-
-Existing code already implements the investigation graph, policy engine, tools, RAG, and SSE on a single FastAPI process. That core is kept. The production architecture adds tenancy, authentication, authorization, and swappable workers and LLM providers around it.
+The domain model is workspace-scoped production incidents. The optional AcmeFlow demo uses the same graph and policy; it does not define the product.
 
 ---
 
 ## Approaches considered
 
-### Approach A — Demo-optimized single tenant (current repository)
+### Approach A — Demo-optimized single tenant
 
-One FastAPI process, optional shared API key, `X-Operator` as a free-text actor, `OPSPILOT_MODE=demo|real`, in-process worker, hashing embedder, deterministic reasoner.
+One FastAPI process, optional shared API key, free-text operator header, global incidents, no RBAC.
 
-**Strengths:** `docker compose up` tells a complete incident story. Policy vs reasoning split is already correct.
+**Strengths:** A single compose file can tell an incident story. Policy vs reasoning split can still be correct.
 
-**Weaknesses:** No users, organizations, or RBAC. Ingest is effectively open when the API key is empty. Historical incidents and knowledge are global. Not a SaaS boundary another engineer can extend into OAuth or billing.
+**Weaknesses:** No users, organizations, or SaaS boundary. Ingest is effectively open when the API key is empty. Historical knowledge is global.
 
-**Verdict:** Keep the investigation and policy design. Do not keep this as the product architecture.
+**Verdict:** Rejected as the product architecture. The investigation and policy design were kept.
 
-### Approach B — Modular monolith with workspace tenancy (recommended)
+### Approach B — Modular monolith with workspace tenancy
 
 One deployable API. Postgres is the system of record. Redis is cache and fan-out. Domain packages stay in-process. Organizations and workspaces are first-class. Users authenticate with email/password JWTs. Ingest uses workspace API keys. The investigation remains a fixed LangGraph. Risk policy remains code. Integrations and LLM providers are protocols with mock and real adapters.
 
-**Strengths:** Matches “one senior engineer can extend it.” Matches the required development order. Horizontal workers are a later swap behind an already-defined `IncidentWorker` interface. SSO is a new identity provider row, not a rewrite.
+**Strengths:** One engineer can extend it. Horizontal workers later swap behind `IncidentWorker`. SSO is a new identity-provider row, not a rewrite.
 
-**Weaknesses:** One process still runs HTTP and work until a queue is introduced. That is accepted for v1.
+**Weaknesses:** One process still runs HTTP and work until a queue is introduced. Accepted for v1.
 
-**Verdict:** Selected.
+**Verdict:** Selected. This is the current architecture.
 
 ### Approach C — Microservice mesh
 
-Separate ingest, auth, worker, RAG, and policy services with an event bus between them.
+Separate ingest, auth, worker, RAG, and policy services with an event bus.
 
 **Strengths:** Independent scale of workers vs API.
 
-**Weaknesses:** Forbidden for this product. It would split the incident transaction, duplicate authorization, and inflate ops for a greenfield team.
+**Weaknesses:** Splits the incident transaction, duplicates authorization, and inflates operations for a greenfield team.
 
 **Verdict:** Rejected.
 
@@ -93,7 +91,7 @@ flowchart TB
   RD --> API
 ```
 
-The API acknowledges an incident as soon as the row exists. Investigation runs through a worker interface. Today that is an in-process task. Tomorrow it can be a Redis/queue consumer. The workflow must not know which.
+The API acknowledges an incident as soon as the row exists. Investigation runs through a worker interface. Today that is an in-process task. A queue consumer can replace it later. The workflow must not know which.
 
 Postgres is authoritative for incidents, approvals, tool results, audit, and identity. Redis publishes invalidation events for the console. If Redis is down, a single node may fall back to an in-memory bus. Multi-node production requires Redis.
 
@@ -118,7 +116,7 @@ Postgres is authoritative for incidents, approvals, tool results, audit, and ide
 
 ---
 
-## Core workflow (product, not UI copy)
+## Core workflow
 
 ```text
 Production Event
@@ -154,29 +152,24 @@ Judgment (hypothesis ranking, RCA wording) may use a reasoning provider. Control
 
 v1: one FastAPI process serves HTTP, SSE, and the worker.
 
-v1.1 (same codebase): `OPSPILOT_WORKER_MODE=inline|queue`. Queue mode consumes jobs from Redis. No new repository.
+Same codebase later: `OPSPILOT_WORKER_MODE=inline|queue`. Queue mode consumes jobs from Redis.
 
 Approvals use `SELECT … FOR UPDATE` so two operators cannot both approve.
 
 ---
 
-## What stays from the current codebase
+## Runtime contracts that are already in place
 
 - Fixed LangGraph investigation, pause by returning, resume from Postgres
-- Policy table, typed tools, no generic execute endpoint
+- Organizations, workspaces, users, RBAC, refresh tokens
+- Workspace-scoped incidents and knowledge
+- Typed tools, no generic execute endpoint
 - SSE as wake-up; REST as the read model
 - Deterministic reasoner as the default so CI and local runs need no vendor key
+- Optional LLM rewrite of narrative fields only (`LlmClient` cannot call tools)
 - pgvector knowledge plus an `Embedder` protocol
-- Demo/real integration adapters behind the same tool interface
-
-## What changes
-
-- Organizations, workspaces, users, RBAC, refresh tokens, SSO-ready identity tables
-- Email/password as the primary login; optional API key is no longer the product auth story
-- All incident and knowledge rows are workspace-scoped
-- LLM provider protocol (OpenAI, Anthropic, Gemini, Ollama) for **narrative and optional synthesis only** unless a future flag explicitly allows more
-- Audit and observability always recorded, including identity of the actor
-- Seeded LinkedIn demo workspace is opt-in via `OPSPILOT_DEMO_SEED_ENABLED` and `scripts/seed_demo.py`. It is not the default runtime.
+- Mock and real integration adapters behind the same tool interface
+- Opt-in demo workspace via `OPSPILOT_DEMO_SEED_ENABLED` and `scripts/seed_demo.py`
 
 ---
 
@@ -219,13 +212,8 @@ flowchart TD
   L --> M[RCA]
 ```
 
-
 ---
 
-## Intentionally later (not stubbed as if they work)
+## Intentionally later
 
-- Automatic promotion of a Slack draft into a send
-- OpenTelemetry export (phase 22 may add exporters; not required for domain correctness)
-- Billing
-- Horizontal autoscaling of workers
-- Full OIDC login UI (schema and interfaces land with auth; flows land when SSO is implemented)
+See [ROADMAP.md](../ROADMAP.md). Not stubbed as if they already work: Slack draft auto-send, OpenTelemetry export, billing, horizontal worker autoscaling, OIDC login UI.

@@ -9,7 +9,7 @@ from app.integrations.slack import SlackAdapter
 
 @pytest.mark.asyncio
 async def test_slack_channel_allowlist() -> None:
-    adapter = SlackAdapter("https://hooks.slack.com/services/T000/B000/XXX", {"#incidents"})
+    adapter = SlackAdapter("https://hooks.slack.com/services/TEST/TEST/TEST", {"#incidents"})
     with pytest.raises(ValueError):
         await adapter.send("#random", "hello", "idem-1")
 

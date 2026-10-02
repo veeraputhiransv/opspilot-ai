@@ -4,7 +4,7 @@ PostgreSQL 16 with `vector`. Primary keys are UUIDs. Timestamps are `timestamptz
 
 JSONB is only for: raw ingest payloads, tool argument/result snapshots, evidence lists, audit detail, workflow cursor. Status, severity, risk, email, and roles are columns.
 
-This document supersedes the single-tenant sketch in the previous `DATABASE_DESIGN.md`. Existing incident tables remain; they gain `organization_id` and `workspace_id`.
+Incident, knowledge, and audit tables are workspace-scoped (`organization_id` + `workspace_id`). Incident numbers are unique per workspace.
 
 ---
 
@@ -174,7 +174,11 @@ Live application logs and Git history remain external. Adapters return snapshots
 
 ## Migrations
 
-- `001_initial` — current single-tenant schema (already applied in this repo).
-- `002_identity_and_tenancy` — identity tables; add org/workspace FKs; backfill a system organization only if rows already exist in development; incident_number uniqueness becomes per-workspace.
+Applied via `alembic upgrade head` from `backend/alembic/versions/`:
 
-Seed data for LinkedIn is not in SQL. Application seeders run in phase 23. Development may create users through the register API or a documented bootstrap env pair used only when `OPSPILOT_BOOTSTRAP_ENABLED=true`.
+- `001_initial` — incident, evidence, and workflow tables
+- `002_identity_and_tenancy` — organizations, workspaces, users, RBAC, per-workspace incident numbers
+- `003_vertical_slice` — ingest idempotency, evidence snapshots, RCA versions, execution guards
+- `004_hardening` — vault tables, execution reliability, stream-ticket storage
+
+Demo and development users are created by application seeders (`scripts/seed_demo.py`) or `POST /auth/register`. Optional bootstrap credentials apply only when `OPSPILOT_BOOTSTRAP_ENABLED=true`.
