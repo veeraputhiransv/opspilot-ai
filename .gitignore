@@ -1,0 +1,44 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+coverage/
+htmlcov/
+dist/
+build/
+
+# Node / Next
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+
+# Local E2E and logs
+.e2e-logs/
+*.log
+
+# Local data
+*.sqlite
+*.db
+dump.rdb
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

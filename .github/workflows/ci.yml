@@ -1,0 +1,199 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: opspilot
+          POSTGRES_PASSWORD: opspilot
+          POSTGRES_DB: opspilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opspilot -d opspilot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e "./backend[dev]"
+      - name: Lint
+        working-directory: backend
+        run: ruff check app tests
+      - name: Types
+        working-directory: backend
+        run: mypy app
+      - name: Migrate
+        working-directory: backend
+        env:
+          OPSPILOT_DATABASE_URL: postgresql+asyncpg://opspilot:opspilot@localhost:5432/opspilot
+        run: alembic upgrade head
+      - name: Tests
+        working-directory: backend
+        env:
+          OPSPILOT_DATABASE_URL: postgresql+asyncpg://opspilot:opspilot@localhost:5432/opspilot
+          OPSPILOT_RATE_LIMIT_PER_MINUTE: "1000"
+          OPSPILOT_REGISTER_RATE_PER_MINUTE: "1000"
+          OPSPILOT_LOGIN_RATE_PER_MINUTE: "1000"
+          OPSPILOT_INGEST_RATE_PER_MINUTE: "1000"
+          OPSPILOT_APPROVAL_RATE_PER_MINUTE: "1000"
+          OPSPILOT_TICKET_RATE_PER_MINUTE: "1000"
+          OPSPILOT_STEP_DELAY_MS: "0"
+          OPSPILOT_VAULT_MASTER_KEY: "ci-vault-master-key-must-be-32-chars"
+          CI: "true"
+        run: pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        working-directory: frontend
+        run: npm install
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+      - name: Unit typecheck tests
+        working-directory: frontend
+        run: npm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: opspilot
+          POSTGRES_PASSWORD: opspilot
+          POSTGRES_DB: opspilot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U opspilot -d opspilot"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      OPSPILOT_DATABASE_URL: postgresql+asyncpg://opspilot:opspilot@localhost:5432/opspilot
+      OPSPILOT_REDIS_URL: redis://localhost:6379/0
+      OPSPILOT_STEP_DELAY_MS: "0"
+      OPSPILOT_VAULT_MASTER_KEY: ci-vault-master-key-must-be-32-chars
+      OPSPILOT_CORS_ORIGINS: http://127.0.0.1:3000
+      OPSPILOT_RATE_LIMIT_PER_MINUTE: "1000"
+      OPSPILOT_REGISTER_RATE_PER_MINUTE: "1000"
+      OPSPILOT_LOGIN_RATE_PER_MINUTE: "1000"
+      OPSPILOT_INGEST_RATE_PER_MINUTE: "1000"
+      OPSPILOT_APPROVAL_RATE_PER_MINUTE: "1000"
+      OPSPILOT_TICKET_RATE_PER_MINUTE: "1000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install backend
+        run: pip install -e "./backend[dev]"
+      - name: Migrate
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Start API
+        working-directory: backend
+        run: |
+          mkdir -p ../.e2e-logs
+          uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../.e2e-logs/backend.log 2>&1 &
+          echo $! > ../.e2e-logs/backend.pid
+      - name: Wait for API ready
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:8000/health/ready; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat .e2e-logs/backend.pid)" 2>/dev/null; then
+              echo "backend died"
+              cat .e2e-logs/backend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat .e2e-logs/backend.log
+          exit 1
+      - name: Install frontend
+        working-directory: frontend
+        run: npm install && npx playwright install --with-deps chromium
+      - name: Start console
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+        run: |
+          npx next dev --hostname 127.0.0.1 --port 3000 > ../.e2e-logs/frontend.log 2>&1 &
+          echo $! > ../.e2e-logs/frontend.pid
+      - name: Wait for console
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:3000 >/dev/null; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat .e2e-logs/frontend.pid)" 2>/dev/null; then
+              echo "frontend died"
+              cat .e2e-logs/frontend.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat .e2e-logs/frontend.log
+          exit 1
+      - name: Playwright
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          E2E_API_URL: http://127.0.0.1:8000
+          CI: "true"
+        run: npx playwright test
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+            .e2e-logs
+          if-no-files-found: warn

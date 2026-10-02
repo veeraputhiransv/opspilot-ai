@@ -1,0 +1,102 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+import { api, storeSession } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import type { TokenResponse } from "@/lib/types";
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  async function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    setPending(true);
+    setError(null);
+    try {
+      const tokens = await api<TokenResponse>("/api/v1/auth/register", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+          full_name: fullName,
+          organization_name: organizationName || null,
+        }),
+      });
+      storeSession(tokens.access_token, tokens.refresh_token, tokens.workspace_id);
+      router.push("/dashboard");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed");
+      setPending(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
+      <p className="text-sm font-semibold tracking-wide">OpsPilot AI</p>
+      <h1 className="mt-2 text-2xl font-semibold">Create workspace</h1>
+      <p className="mt-2 text-sm text-muted">
+        Registers a user, an organization you own, and a production workspace.
+      </p>
+      <form className="mt-8 space-y-4" onSubmit={onSubmit}>
+        <label className="block text-sm">
+          Full name
+          <input
+            className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+            required
+          />
+        </label>
+        <label className="block text-sm">
+          Organization
+          <input
+            className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2"
+            value={organizationName}
+            onChange={(event) => setOrganizationName(event.target.value)}
+            placeholder="Acme Operations"
+          />
+        </label>
+        <label className="block text-sm">
+          Email
+          <input
+            className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </label>
+        <label className="block text-sm">
+          Password (12+ characters)
+          <input
+            className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            minLength={12}
+            required
+          />
+        </label>
+        {error ? <p className="text-sm text-red-400">{error}</p> : null}
+        <Button type="submit" disabled={pending}>
+          {pending ? "Creating…" : "Create account"}
+        </Button>
+      </form>
+      <p className="mt-6 text-sm text-muted">
+        Already registered? <Link href="/login">Sign in</Link>
+      </p>
+    </main>
+  );
+}
