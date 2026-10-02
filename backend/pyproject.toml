@@ -21,6 +21,7 @@ dependencies = [
   "pgvector>=0.3.6",
   "PyJWT>=2.10",
   "cryptography>=44.0",
+  "argon2-cffi>=23.1",
 ]
 
 [project.optional-dependencies]
