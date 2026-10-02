@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { RiskBadge } from "@/components/status";
 import { api } from "@/lib/api";
-import { confidenceLabel } from "@/lib/format";
+import { formatWhen, investigationScore } from "@/lib/format";
 import type { Approval } from "@/lib/types";
 
 export function ApprovalCard({
@@ -23,6 +23,7 @@ export function ApprovalCard({
     JSON.stringify(approval.proposed_arguments, null, 2),
   );
   const versions = versionPair(approval.proposed_arguments);
+  const pending = approval.status === "PENDING_APPROVAL";
 
   async function decide(path: "approve" | "reject") {
     setBusy(true);
@@ -59,11 +60,14 @@ export function ApprovalCard({
   }
 
   return (
-    <article className="rounded-md border border-line bg-surface p-5 shadow-card">
+    <article
+      className="rounded-md border border-line bg-surface p-6 shadow-card"
+      data-tool-name={approval.tool_name}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted">Proposed action</p>
-          <h3 className="mt-1 text-lg font-medium">{approval.title}</h3>
+          <p className="text-xs uppercase tracking-wide text-muted">Human Approval Required</p>
+          <h3 className="mt-2 text-2xl font-medium">{approval.title}</h3>
           <p className="mt-1 font-mono text-xs text-muted">
             {approval.incident_number} · {approval.service}
           </p>
@@ -71,16 +75,21 @@ export function ApprovalCard({
         <RiskBadge risk={approval.risk_level} />
       </div>
       {versions ? (
-        <div className="mt-4 flex items-center gap-3 font-mono text-sm">
-          <span>{versions.from}</span>
-          <span className="text-muted">→</span>
-          <span>{versions.to}</span>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-md border border-line bg-bg px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-muted">From</p>
+            <p className="mt-1 font-mono text-sm">{versions.from}</p>
+          </div>
+          <div className="rounded-md border border-line bg-bg px-3 py-2">
+            <p className="text-xs uppercase tracking-wide text-muted">To</p>
+            <p className="mt-1 font-mono text-sm">{versions.to}</p>
+          </div>
         </div>
       ) : null}
       <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
         <div>
           <dt className="text-xs uppercase tracking-wide text-muted">Investigation score</dt>
-          <dd className="mt-1">{confidenceLabel(approval.confidence)}</dd>
+          <dd className="mt-1">{investigationScore(approval.confidence)}</dd>
         </div>
         <div>
           <dt className="text-xs uppercase tracking-wide text-muted">Status</dt>
@@ -96,7 +105,14 @@ export function ApprovalCard({
           ))}
         </ul>
       ) : null}
-      {approval.status === "PENDING_APPROVAL" ? (
+      {!pending && approval.decided_by ? (
+        <p className="mt-4 text-sm">
+          {approval.status === "APPROVED" ? "Approved" : approval.status.replaceAll("_", " ")} by{" "}
+          {approval.decided_by}
+          {approval.decided_at ? ` · ${formatWhen(approval.decided_at)}` : ""}
+        </p>
+      ) : null}
+      {pending ? (
         <div className="mt-5 space-y-3">
           <label className="block text-xs uppercase tracking-wide text-muted" htmlFor={`comment-${approval.id}`}>
             Decision note

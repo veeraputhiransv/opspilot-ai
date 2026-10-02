@@ -1,24 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ApprovalCard } from "@/components/approval-card";
 import { SeverityBadge, StatusText } from "@/components/status";
 import { useStream } from "@/components/stream";
 import { Button } from "@/components/ui/button";
-import { api, accessToken, apiBase } from "@/lib/api";
-import { confidenceLabel, formatClock, formatWhen } from "@/lib/format";
-import type { IncidentDetail } from "@/lib/types";
+import { accessToken, api, apiBase } from "@/lib/api";
+import { formatClock, formatLatency, formatWhen, investigationScore, liveDuration } from "@/lib/format";
+import type { IncidentAction, IncidentDetail } from "@/lib/types";
 
 export function IncidentView({ id }: { id: string }) {
   const { revision, reconnecting, connected } = useStream();
   const [incident, setIncident] = useState<IncidentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [evidenceTab, setEvidenceTab] = useState<
-    "items" | "logs" | "deployments" | "commits" | "history" | "reports"
-  >("items");
+  const [now, setNow] = useState(() => Date.now());
+  const [openEvidence, setOpenEvidence] = useState<string | null>(null);
   const [openStep, setOpenStep] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -37,6 +36,11 @@ export function IncidentView({ id }: { id: string }) {
     void load();
   }, [load, revision]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   async function downloadRca() {
     const token = accessToken();
     const response = await fetch(`${apiBase()}/api/v1/incidents/${id}/rca/export`, {
@@ -53,6 +57,47 @@ export function IncidentView({ id }: { id: string }) {
     link.download = `${incident?.incident_number ?? "incident"}-rca.html`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function copyRca() {
+    if (!incident?.rca) return;
+    const report = incident.rca;
+    const text = [
+      "Executive Summary",
+      report.executive_summary,
+      "",
+      "Impact",
+      report.impact,
+      "",
+      "Detection",
+      report.detection,
+      "",
+      "Timeline",
+      report.timeline_narrative,
+      "",
+      "Root Cause",
+      report.root_cause,
+      "",
+      "Contributing Factors",
+      ...report.contributing_factors.map((item) => `- ${item}`),
+      "",
+      "Resolution",
+      report.resolution,
+      "",
+      "Corrective Actions",
+      ...report.corrective_actions.map((item) => `- ${item}`),
+      "",
+      "Preventive Actions",
+      ...report.preventive_actions.map((item) => `- ${item}`),
+      "",
+      "Evidence",
+      ...report.evidence_sources.map((item) => `- ${item}`),
+      "",
+      "AI Disclosure",
+      report.disclosure,
+    ].join("\n");
+    await navigator.clipboard.writeText(text);
+    toast.success("RCA copied");
   }
 
   async function resolve() {
@@ -82,39 +127,44 @@ export function IncidentView({ id }: { id: string }) {
 
   const primary = incident.hypotheses.find((item) => item.is_primary) ?? incident.hypotheses[0];
   const alternatives = incident.hypotheses.filter((item) => item !== primary);
-  const pending = incident.approvals.filter((item) => item.status === "PENDING_APPROVAL");
   const working = incident.status === "investigating" || incident.status === "executing";
+  const duration = liveDuration(incident.started_at, incident.resolved_at);
+  void now;
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-mono text-2xl">{incident.incident_number}</h1>
-            <SeverityBadge severity={incident.severity} />
-            <StatusText status={incident.status} />
-          </div>
-          <p className="mt-2 text-lg">{incident.title}</p>
-          <p className="mt-1 text-sm text-muted">
-            {incident.service} · {incident.environment} · error rate{" "}
-            {incident.error_rate == null ? "—" : `${incident.error_rate}%`} · started{" "}
-            {formatWhen(incident.started_at)}
-          </p>
-          <p className="mt-2 text-sm">
-            {working ? <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-[#9eb8f5]" /> : null}
-            {incident.current_activity}
-          </p>
-        </div>
-        <div className="text-right text-xs text-muted">
-          <div>{incident.model_used ?? "opspilot-deterministic-v1"}</div>
+      <header className="rounded-md border border-line bg-surface p-6 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            {incident.input_tokens + incident.output_tokens} tokens · {incident.execution_time_ms ?? 0} ms compute
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="font-mono text-2xl">{incident.incident_number}</h1>
+              <SeverityBadge severity={incident.severity} />
+              <StatusText status={incident.status} />
+            </div>
+            <h2 className="mt-2 text-xl font-medium">{incident.title}</h2>
+            <p className="mt-2 text-sm text-muted">
+              {incident.service} · {incident.environment} · started {formatWhen(incident.started_at)} ·
+              duration {duration}
+            </p>
+            <p className="mt-3 text-sm">
+              {working ? (
+                <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
+              ) : null}
+              {incident.current_activity}
+            </p>
           </div>
-          {incident.status !== "resolved" ? (
-            <Button className="mt-3" variant="outline" size="sm" onClick={() => void resolve()}>
-              Mark resolved
-            </Button>
-          ) : null}
+          <div className="text-right text-xs text-muted">
+            <div>{incident.model_used ?? "opspilot-deterministic-v1"}</div>
+            <div>
+              {incident.input_tokens + incident.output_tokens} tokens · {incident.execution_time_ms ?? 0} ms
+              compute
+            </div>
+            {incident.status !== "resolved" ? (
+              <Button className="mt-3" variant="outline" size="sm" onClick={() => void resolve()}>
+                Mark resolved
+              </Button>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -124,63 +174,60 @@ export function IncidentView({ id }: { id: string }) {
         </p>
       ) : null}
       {incident.last_error ? (
-        <p className="rounded-md border border-[#6b2a2a] bg-[#3a1717] px-4 py-3 text-sm text-[#ffb4b4]">
+        <p className="rounded-md border border-line bg-surface px-4 py-3 text-sm text-danger">
           Investigation error: {incident.last_error}
         </p>
       ) : null}
       {incident.actions.some((item) => item.status === "FAILED") ? (
-        <p className="rounded-md border border-[#6b2a2a] bg-[#3a1717] px-4 py-3 text-sm text-[#ffb4b4]">
+        <p className="rounded-md border border-line bg-surface px-4 py-3 text-sm text-danger">
           An approved action failed. The incident was not marked successful from the browser.
         </p>
       ) : null}
-      {incident.actions.some((item) => item.status === "EXECUTING") ? (
-        <p className="rounded-md border border-line bg-surface px-4 py-3 text-sm">
-          Action execution in progress. Refresh is safe; the server will not double-run it.
-        </p>
-      ) : null}
-      {incident.approvals.some((item) => item.status === "EXPIRED") ? (
-        <p className="rounded-md border border-line bg-surface px-4 py-3 text-sm">This approval expired.</p>
-      ) : null}
-      {incident.status === "investigating" && incident.current_activity?.includes("Waiting") ? (
-        <p className="rounded-md border border-line bg-surface px-4 py-3 text-sm">Investigation is stalled pending input.</p>
-      ) : null}
 
-      <div className="grid items-start gap-6 xl:grid-cols-[340px_1fr]">
-        <section className="rounded-md border border-line bg-surface p-5">
-          <h2 className="text-sm font-medium">Incident timeline</h2>
+      <div className="grid items-start gap-6 xl:grid-cols-[320px_1fr]">
+        <section className="rounded-md border border-line bg-surface p-5 shadow-card">
+          <h2 className="text-sm font-medium">Investigation timeline</h2>
           <ol className="mt-4 space-y-4 border-l border-line pl-4">
-            {incident.timeline.map((event, index) => (
-              <li key={event.id} className="relative">
-                <span
-                  className={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full ${
-                    index === incident.timeline.length - 1 ? "bg-[#9eb8f5]" : "bg-line"
-                  }`}
-                />
-                <time className="font-mono text-xs text-muted">{formatClock(event.occurred_at)}</time>
-                <p className="text-sm">{event.title}</p>
-                {event.detail ? <p className="text-xs leading-5 text-muted">{event.detail}</p> : null}
-              </li>
-            ))}
+            {incident.timeline.map((event, index) => {
+              const current = index === incident.timeline.length - 1 && working;
+              return (
+                <li key={event.id} className="relative">
+                  <span
+                    className={`absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full ${
+                      current ? "animate-pulse bg-primary" : "bg-line"
+                    }`}
+                  />
+                  <time className="font-mono text-xs text-muted">{formatClock(event.occurred_at)}</time>
+                  <p className="text-sm">{event.title}</p>
+                  {event.detail ? <p className="text-xs leading-5 text-muted">{event.detail}</p> : null}
+                </li>
+              );
+            })}
           </ol>
         </section>
 
         <div className="space-y-6">
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="text-sm font-medium">Likely root cause</h2>
+          <section id="investigation" className="rounded-md border border-line bg-surface p-5 shadow-card">
+            <h2 className="text-sm font-medium">AI Investigation</h2>
             {primary ? (
               <>
+                <p className="mt-1 text-xs text-muted">Primary hypothesis from correlated evidence</p>
                 <div className="mt-3 flex items-end justify-between gap-4">
                   <p className="text-xl">{primary.title}</p>
-                  <p className="font-mono text-2xl">{confidenceLabel(primary.confidence)}</p>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-wide text-muted">Investigation score</p>
+                    <p className="font-mono text-2xl">{investigationScore(primary.confidence)}</p>
+                  </div>
                 </div>
                 <div className="mt-3 h-1.5 rounded-full bg-elevated">
                   <div
-                    className="h-1.5 rounded-full bg-[#9eb8f5]"
+                    className="h-1.5 rounded-full bg-primary"
                     style={{ width: `${Math.round(primary.confidence * 100)}%` }}
                   />
                 </div>
                 <p className="mt-3 text-sm text-muted">{primary.description}</p>
-                <ul className="mt-4 space-y-2 text-sm">
+                <h3 className="mt-5 text-xs uppercase tracking-wide text-muted">Supporting evidence</h3>
+                <ul className="mt-2 space-y-2 text-sm">
                   {primary.evidence.map((item) => (
                     <li key={item}>• {item}</li>
                   ))}
@@ -196,7 +243,7 @@ export function IncidentView({ id }: { id: string }) {
                   {alternatives.map((item) => (
                     <li key={item.id} className="flex items-center justify-between text-sm">
                       <span>{item.title}</span>
-                      <span className="font-mono text-muted">{confidenceLabel(item.confidence)}</span>
+                      <span className="font-mono text-muted">{investigationScore(item.confidence)}</span>
                     </li>
                   ))}
                 </ul>
@@ -204,128 +251,58 @@ export function IncidentView({ id }: { id: string }) {
             ) : null}
           </section>
 
-          {pending.map((approval) => (
+          {incident.approvals.map((approval) => (
             <ApprovalCard key={approval.id} approval={approval} onChanged={() => void load()} />
           ))}
 
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="text-sm font-medium">Evidence</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(["items", "logs", "deployments", "commits", "history", "reports"] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setEvidenceTab(tab)}
-                  className={`rounded-md px-3 py-1 text-xs capitalize ${
-                    evidenceTab === tab ? "bg-elevated text-text" : "text-muted"
-                  }`}
-                >
-                  {tab === "history" ? "Similar incidents" : tab === "items" ? "Collected" : tab}
-                </button>
-              ))}
-            </div>
-            <div className="mt-4">
-              {evidenceTab === "items" ? <EvidenceItems incident={incident} /> : null}
-              {evidenceTab === "logs" ? <LogList incident={incident} /> : null}
-              {evidenceTab === "deployments" ? <DeployList incident={incident} /> : null}
-              {evidenceTab === "commits" ? <CommitList incident={incident} /> : null}
-              {evidenceTab === "history" ? <HistoryList incident={incident} /> : null}
-              {evidenceTab === "reports" ? <ReportList incident={incident} /> : null}
-            </div>
-          </section>
+          <ExecutionPanel actions={incident.actions} />
+          <EvidencePanel incident={incident} openId={openEvidence} onToggle={setOpenEvidence} />
+          <AgentActivity incident={incident} openStep={openStep} onToggle={setOpenStep} />
 
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="text-sm font-medium">Actions</h2>
-            {incident.actions.length === 0 ? (
-              <p className="mt-3 text-sm text-muted">No actions proposed yet.</p>
-            ) : (
-              <ul className="mt-3 divide-y divide-line">
-                {incident.actions.map((action) => (
-                  <li key={action.id} className="flex items-start justify-between gap-4 py-3 text-sm">
-                    <div>
-                      <p>{action.title}</p>
-                      <p className="text-xs text-muted">
-                        {action.tool_name} · {action.risk_level}
-                      </p>
-                    </div>
-                    <span className="font-mono text-xs">{action.status}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="rounded-md border border-line bg-surface p-5">
-            <h2 className="text-sm font-medium">Agent run inspector</h2>
-            <p className="mt-1 text-xs text-muted">Steps, tools, and timings. No hidden reasoning transcript.</p>
-            {incident.agent_runs.length === 0 ? (
-              <p className="mt-3 text-sm text-muted">No agent run yet.</p>
-            ) : (
-              incident.agent_runs.map((run) => (
-                <div key={run.id} className="mt-4">
-                  <p className="font-mono text-xs text-muted">
-                    {run.status} · {run.model} · {run.latency_ms ?? 0} ms · {run.input_tokens}/{run.output_tokens} tokens
+          {incident.status === "resolved" && incident.rca ? (
+            <section className="rounded-md border border-line bg-surface p-5 shadow-card">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-medium">Resolution</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    {incident.service} recovered. Duration {duration}. Peak error rate{" "}
+                    {incident.error_rate == null ? "—" : `${incident.error_rate}%`}.
                   </p>
-                  <ul className="mt-2 space-y-2">
-                    {run.steps.map((step) => (
-                      <li key={step.id} className="rounded-md bg-bg px-3 py-2 text-sm">
-                        <button
-                          type="button"
-                          className="flex w-full justify-between gap-3 text-left"
-                          onClick={() => setOpenStep(openStep === step.id ? null : step.id)}
-                        >
-                          <span>
-                            {step.node_name} · {step.status}
-                          </span>
-                          <span className="font-mono text-xs text-muted">{step.latency_ms ?? 0} ms</span>
-                        </button>
-                        {openStep === step.id ? (
-                          <div className="mt-2 space-y-1 text-xs text-muted">
-                            <p>{step.summary}</p>
-                            {step.evidence?.length ? <p>Evidence used: {step.evidence.join("; ")}</p> : null}
-                            <p>
-                              Tokens {step.input_tokens}/{step.output_tokens}
-                            </p>
-                            {step.error ? <p>{step.error}</p> : null}
-                            {step.tools.map((tool) => (
-                              <p key={tool.id} className="font-mono">
-                                {tool.tool_name} · {tool.risk_level} · {tool.result_summary}
-                              </p>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted">{step.summary}</p>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
                 </div>
-              ))
-            )}
-          </section>
+                <a href="#rca" className="text-sm text-primary">
+                  View RCA
+                </a>
+              </div>
+            </section>
+          ) : null}
 
           {incident.rca ? (
-            <section className="rounded-md border border-line bg-surface p-5">
-              <div className="flex items-center justify-between">
+            <section id="rca" className="rounded-md border border-line bg-surface p-5 shadow-card">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-sm font-medium">RCA</h2>
-                <button type="button" className="text-sm text-primary" onClick={() => void downloadRca()}>
-                  Download HTML
-                </button>
+                <div className="flex gap-3">
+                  <button type="button" className="text-sm text-primary" onClick={() => void copyRca()}>
+                    Copy RCA
+                  </button>
+                  <button type="button" className="text-sm text-primary" onClick={() => void downloadRca()}>
+                    Export
+                  </button>
+                </div>
               </div>
-              <RcaBlock title="Executive summary" body={incident.rca.executive_summary} />
+              <RcaBlock title="Executive Summary" body={incident.rca.executive_summary} />
               <RcaBlock title="Impact" body={incident.rca.impact} />
               <RcaBlock title="Detection" body={incident.rca.detection} />
               <RcaBlock title="Timeline" body={incident.rca.timeline_narrative} />
-              <RcaBlock title="Root cause" body={incident.rca.root_cause} />
-              <RcaList title="Contributing factors" items={incident.rca.contributing_factors} />
+              <RcaBlock title="Root Cause" body={incident.rca.root_cause} />
+              <RcaList title="Contributing Factors" items={incident.rca.contributing_factors} />
               <RcaBlock title="Resolution" body={incident.rca.resolution} />
-              <RcaList title="Corrective actions" items={incident.rca.corrective_actions} />
-              <RcaList title="Preventive actions" items={incident.rca.preventive_actions} />
-              <RcaList title="Evidence sources" items={incident.rca.evidence_sources} />
+              <RcaList title="Corrective Actions" items={incident.rca.corrective_actions} />
+              <RcaList title="Preventive Actions" items={incident.rca.preventive_actions} />
+              <RcaList title="Evidence" items={incident.rca.evidence_sources} />
+              <RcaBlock title="AI Disclosure" body={incident.rca.disclosure} />
               <p className="mt-4 text-xs text-muted">
-                Confidence {confidenceLabel(incident.rca.confidence)} · version {incident.rca.version}
+                Investigation score {investigationScore(incident.rca.confidence)} · version {incident.rca.version}
               </p>
-              <p className="mt-2 text-xs text-muted">{incident.rca.disclosure}</p>
             </section>
           ) : null}
         </div>
@@ -334,103 +311,193 @@ export function IncidentView({ id }: { id: string }) {
   );
 }
 
-function EvidenceItems({ incident }: { incident: IncidentDetail }) {
-  if (!incident.evidence.items?.length) return <Empty>No structured evidence yet.</Empty>;
+function ExecutionPanel({ actions }: { actions: IncidentAction[] }) {
+  if (actions.length === 0) {
+    return (
+      <section id="execution" className="rounded-md border border-line bg-surface p-5 shadow-card">
+        <h2 className="text-sm font-medium">Execution</h2>
+        <p className="mt-3 text-sm text-muted">No actions proposed yet.</p>
+      </section>
+    );
+  }
   return (
-    <ul className="space-y-3 text-sm">
-      {incident.evidence.items.map((item) => (
-        <li key={item.id}>
-          <p className="font-mono text-xs text-muted">
-            {item.source_type} · {item.source_reference ?? "n/a"}
-          </p>
-          <p>{item.title}</p>
-          <p className="text-xs text-muted">{item.summary}</p>
-        </li>
-      ))}
-    </ul>
+    <section id="execution" className="rounded-md border border-line bg-surface p-5 shadow-card">
+      <h2 className="text-sm font-medium">Execution</h2>
+      <ul className="mt-3 divide-y divide-line">
+        {actions.map((action) => (
+          <li key={action.id} className="py-3 text-sm">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p>{action.title}</p>
+                <p className="text-xs text-muted">
+                  {action.tool_name} · {action.risk_level}
+                </p>
+                {action.execution_id ? (
+                  <p className="mt-1 font-mono text-xs text-muted">execution {action.execution_id}</p>
+                ) : null}
+                {action.provider_ref ? (
+                  <p className="font-mono text-xs text-muted">ref {action.provider_ref}</p>
+                ) : null}
+                {action.executed_at ? (
+                  <p className="text-xs text-muted">started {formatWhen(action.executed_at)}</p>
+                ) : null}
+              </div>
+              <span className="font-mono text-xs">{action.status}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
-function LogList({ incident }: { incident: IncidentDetail }) {
-  if (incident.evidence.logs.length === 0) return <Empty>No logs yet.</Empty>;
+function EvidencePanel({
+  incident,
+  openId,
+  onToggle,
+}: {
+  incident: IncidentDetail;
+  openId: string | null;
+  onToggle: (id: string | null) => void;
+}) {
+  const cards = useMemo(() => {
+    const rows: Array<{ id: string; category: string; title: string; summary: string; meta: string }> = [];
+    const structured = incident.evidence.items ?? [];
+    if (structured.length > 0) {
+      for (const item of structured) {
+        rows.push({
+          id: item.id,
+          category: item.source_type,
+          title: item.title,
+          summary: item.summary,
+          meta: item.source_reference ?? "n/a",
+        });
+      }
+      return rows;
+    }
+    incident.evidence.logs.forEach((log, index) => {
+      rows.push({
+        id: `log-${index}`,
+        category: "Logs",
+        title: `${log.service} ${log.level}`,
+        summary: log.message,
+        meta: formatClock(log.timestamp),
+      });
+    });
+    incident.evidence.deployments.forEach((deploy, index) => {
+      rows.push({
+        id: `deploy-${index}`,
+        category: "Deployment",
+        title: deploy.version,
+        summary: `${deploy.status} · ${deploy.author} · ${deploy.commit_sha}`,
+        meta: formatWhen(deploy.deployed_at),
+      });
+    });
+    incident.evidence.commits.forEach((commit, index) => {
+      rows.push({
+        id: `commit-${index}`,
+        category: "Source Control",
+        title: commit.sha,
+        summary: commit.message,
+        meta: commit.author,
+      });
+    });
+    incident.evidence.related_incidents.forEach((item, index) => {
+      rows.push({
+        id: `hist-${index}`,
+        category: "Historical Incident",
+        title: item.external_id,
+        summary: `${item.title}. ${item.root_cause}`,
+        meta: `similarity ${item.similarity.toFixed(2)}`,
+      });
+    });
+    return rows;
+  }, [incident]);
+
   return (
-    <ul className="space-y-2 font-mono text-xs">
-      {incident.evidence.logs.map((log) => (
-        <li key={`${log.timestamp}-${log.message}`}>
-          <span className="text-muted">{formatClock(log.timestamp)}</span>{" "}
-          <span className={log.level === "ERROR" ? "text-[#ff8d8d]" : "text-muted"}>{log.level}</span>{" "}
-          {log.message}
-        </li>
-      ))}
-    </ul>
+    <section id="evidence" className="rounded-md border border-line bg-surface p-5 shadow-card">
+      <h2 className="text-sm font-medium">Evidence</h2>
+      <p className="mt-1 text-xs text-muted">Persisted correlation artifacts, not decorative cards.</p>
+      {cards.length === 0 ? (
+        <p className="mt-3 text-sm text-muted">No evidence collected yet.</p>
+      ) : (
+        <ul className="mt-4 grid gap-3 md:grid-cols-2">
+          {cards.map((card) => (
+            <li key={card.id} className="rounded-md border border-line bg-bg p-3">
+              <button
+                type="button"
+                className="w-full text-left"
+                onClick={() => onToggle(openId === card.id ? null : card.id)}
+              >
+                <p className="text-xs uppercase tracking-wide text-muted">{card.category}</p>
+                <p className="mt-1 font-mono text-sm">{card.title}</p>
+                <p className="mt-1 text-xs text-muted">{card.meta}</p>
+                {openId === card.id ? <p className="mt-2 text-sm leading-6">{card.summary}</p> : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
-function DeployList({ incident }: { incident: IncidentDetail }) {
-  if (incident.evidence.deployments.length === 0) return <Empty>No deployments yet.</Empty>;
+function AgentActivity({
+  incident,
+  openStep,
+  onToggle,
+}: {
+  incident: IncidentDetail;
+  openStep: string | null;
+  onToggle: (id: string | null) => void;
+}) {
+  const run = incident.agent_runs[0];
   return (
-    <ul className="space-y-2 text-sm">
-      {incident.evidence.deployments.map((deploy) => (
-        <li key={deploy.version} className="flex justify-between gap-3">
-          <span className="font-mono">
-            {deploy.version} · {deploy.status}
-          </span>
-          <span className="text-muted">{deploy.author}</span>
-        </li>
-      ))}
-    </ul>
+    <section className="rounded-md border border-line bg-surface p-5 shadow-card">
+      <h2 className="text-sm font-medium">Agent activity</h2>
+      <p className="mt-1 text-xs text-muted">Graph steps only. No hidden reasoning transcript.</p>
+      {!run ? (
+        <p className="mt-3 text-sm text-muted">No agent run yet.</p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {run.steps.map((step) => (
+            <li key={step.id} className="rounded-md bg-bg px-3 py-2 text-sm">
+              <button
+                type="button"
+                className="flex w-full justify-between gap-3 text-left"
+                onClick={() => onToggle(openStep === step.id ? null : step.id)}
+              >
+                <span>
+                  {step.node_name} · {step.status}
+                  {step.status === "running" ? (
+                    <span className="ml-2 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                  ) : null}
+                </span>
+                <span className="font-mono text-xs text-muted">{formatLatency(step.latency_ms)}</span>
+              </button>
+              {openStep === step.id ? (
+                <div className="mt-2 space-y-1 text-xs text-muted">
+                  <p>{step.summary}</p>
+                  {step.evidence?.length ? <p>Evidence used: {step.evidence.join("; ")}</p> : null}
+                  <p>
+                    Tokens {step.input_tokens}/{step.output_tokens}
+                  </p>
+                  {step.error ? <p>{step.error}</p> : null}
+                  {step.tools.map((tool) => (
+                    <p key={tool.id} className="font-mono">
+                      {tool.tool_name} · {tool.risk_level} · {tool.result_summary}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted">{step.summary}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
-}
-
-function CommitList({ incident }: { incident: IncidentDetail }) {
-  if (incident.evidence.commits.length === 0) return <Empty>No commits yet.</Empty>;
-  return (
-    <ul className="space-y-2 text-sm">
-      {incident.evidence.commits.map((commit) => (
-        <li key={commit.sha}>
-          <span className="font-mono text-xs">{commit.sha}</span> {commit.message}
-          <div className="text-xs text-muted">{commit.author}</div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function HistoryList({ incident }: { incident: IncidentDetail }) {
-  if (incident.evidence.related_incidents.length === 0) return <Empty>No similar incidents yet.</Empty>;
-  return (
-    <ul className="space-y-3 text-sm">
-      {incident.evidence.related_incidents.map((item) => (
-        <li key={item.external_id}>
-          <div className="flex justify-between">
-            <span className="font-mono text-xs">{item.external_id}</span>
-            <span className="font-mono text-xs">{item.similarity.toFixed(2)}</span>
-          </div>
-          <p>{item.title}</p>
-          <p className="text-xs text-muted">{item.root_cause}</p>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function ReportList({ incident }: { incident: IncidentDetail }) {
-  if (incident.evidence.customer_reports.length === 0) return <Empty>No customer reports.</Empty>;
-  return (
-    <ul className="space-y-3 text-sm">
-      {incident.evidence.customer_reports.map((report) => (
-        <li key={report.external_ref}>
-          <p className="font-mono text-xs text-muted">{report.external_ref}</p>
-          <p>{report.title}</p>
-          <p className="text-xs text-muted">{report.body}</p>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-muted">{children}</p>;
 }
 
 function RcaBlock({ title, body }: { title: string; body: string }) {

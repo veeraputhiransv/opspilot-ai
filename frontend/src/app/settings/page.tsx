@@ -62,6 +62,13 @@ export default function SettingsPage() {
       </section>
       <section className="rounded-md border border-line bg-surface p-5">
         <h2 className="text-sm">Ingest API keys</h2>
+        {me?.demo ? (
+          <p className="mt-2 text-sm text-muted">
+            Demo sessions cannot create ingest keys or change workspace security configuration.
+          </p>
+        ) : null}
+        {me?.demo ? null : (
+          <>
         <p className="mt-1 text-xs text-muted">Use `ops_live_…` keys for POST /api/v1/events. Shown once at creation.</p>
         <div className="mt-3 flex gap-2">
           <input
@@ -90,6 +97,8 @@ export default function SettingsPage() {
             </li>
           ))}
         </ul>
+          </>
+        )}
       </section>
       <section className="rounded-md border border-line bg-surface">
         <h2 className="border-b border-line px-4 py-3 text-sm">Tool policy</h2>

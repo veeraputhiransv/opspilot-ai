@@ -121,6 +121,8 @@ jobs:
       OPSPILOT_INGEST_RATE_PER_MINUTE: "1000"
       OPSPILOT_APPROVAL_RATE_PER_MINUTE: "1000"
       OPSPILOT_TICKET_RATE_PER_MINUTE: "1000"
+      OPSPILOT_DEMO_SEED_ENABLED: "true"
+      OPSPILOT_DEMO_PASSWORD: AcmeFlow-operator-12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -134,6 +136,8 @@ jobs:
       - name: Migrate
         working-directory: backend
         run: alembic upgrade head
+      - name: Seed demo workspace
+        run: python scripts/seed_demo.py && python scripts/reset_demo.py
       - name: Start API
         working-directory: backend
         run: |

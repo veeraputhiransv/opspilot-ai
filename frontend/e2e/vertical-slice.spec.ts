@@ -15,15 +15,21 @@ test("approve resumes the same incident through execution and RCA", async ({ pag
   await expect(page.getByRole("heading", { name: /INC-\d+/ })).toBeVisible();
 
   const waiting = await waitForIncident(page, incidentId, (incident) =>
-    incident.approvals.some((item) => item.status === "PENDING_APPROVAL"),
+    incident.approvals.some(
+      (item) => item.status === "PENDING_APPROVAL" && item.tool_name === "rollback_deployment",
+    ),
   );
   expect(waiting.evidence).toBeTruthy();
   expect(waiting.hypotheses.length).toBeGreaterThan(0);
   expect(waiting.hypotheses.some((item) => item.is_primary)).toBe(true);
 
-  await expect(page.getByText("Likely root cause")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "AI Investigation", exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(page.getByRole("heading", { name: "Evidence", exact: true })).toBeVisible();
-  const approve = page.getByRole("button", { name: /Approve/ }).first();
+  const approve = page.locator('[data-tool-name="rollback_deployment"]').getByRole("button", {
+    name: "Approve rollback",
+  });
   await expect(approve).toBeVisible();
   await approve.click();
   await expect(page.getByText("Approval recorded")).toBeVisible();

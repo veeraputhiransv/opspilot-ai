@@ -16,6 +16,7 @@ class AuthContext:
     roles: tuple[str, ...]
     actor_label: str
     via: str  # "jwt" | "api_key"
+    is_demo_workspace: bool = False
 
     def has_role(self, *allowed: str) -> bool:
         return any(role in allowed for role in self.roles)

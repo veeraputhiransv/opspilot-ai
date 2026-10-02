@@ -59,6 +59,8 @@ class IntegrationService:
         secrets: dict,
         configuration: dict,
     ) -> dict:
+        if auth.is_demo_workspace:
+            raise ForbiddenError("Demo sessions cannot connect real integrations.")
         if "admin" not in auth.roles:
             raise ForbiddenError("Only workspace admins can connect integrations.")
         if provider not in PROVIDERS:
@@ -106,6 +108,22 @@ class IntegrationService:
         async with session_scope(self.sessions) as session:
             row = await self._load(session, auth.workspace_id, provider)
             row.status = "VERIFYING"
+            if bool((row.configuration or {}).get("simulation")):
+                from app.models.base import utcnow
+
+                row.status = "CONNECTED"
+                row.last_verified_at = utcnow()
+                row.last_error = None
+                session.add(
+                    audit_row(
+                        auth=auth,
+                        action="integration_verify",
+                        resource_type="integration_connection",
+                        resource_id=row.id,
+                        detail={"provider": provider, "status": row.status, "simulation": True},
+                    )
+                )
+                return _public(provider, row)
             secrets = self._secrets(row)
             try:
                 await self._adapter(provider, secrets, row.configuration).verify()  # type: ignore[union-attr]
@@ -129,6 +147,8 @@ class IntegrationService:
             return _public(provider, row)
 
     async def disconnect(self, auth: AuthContext, provider: str) -> dict:
+        if auth.is_demo_workspace:
+            raise ForbiddenError("Demo sessions cannot change integration configuration.")
         if "admin" not in auth.roles:
             raise ForbiddenError("Only workspace admins can disconnect integrations.")
         async with session_scope(self.sessions) as session:
@@ -304,6 +324,7 @@ def _public(provider: str, row: IntegrationConnection | None) -> dict:
         "last_error": row.last_error if row else None,
         "capabilities": list(CAPABILITIES.get(provider, ())),
         "has_credentials": bool(row and row.encrypted_credentials),
+        "simulation": bool(row and (row.configuration or {}).get("simulation")),
     }
 
 

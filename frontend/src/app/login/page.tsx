@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { api, storeSession } from "@/lib/api";
+import { startDemoSession } from "@/lib/demo";
 import { Button } from "@/components/ui/button";
 import type { TokenResponse } from "@/lib/types";
 
@@ -68,6 +69,26 @@ export default function LoginPage() {
           {pending ? "Signing in…" : "Sign in"}
         </Button>
       </form>
+      <Button
+        className="mt-6"
+        variant="outline"
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          setPending(true);
+          startDemoSession()
+            .then(() => {
+              router.push("/dashboard");
+              router.refresh();
+            })
+            .catch((err: unknown) => {
+              setError(err instanceof Error ? err.message : "Demo session is unavailable.");
+              setPending(false);
+            });
+        }}
+      >
+        Try Demo
+      </Button>
       <p className="mt-6 text-sm text-muted">
         New workspace? <Link href="/register">Create an account</Link>
       </p>

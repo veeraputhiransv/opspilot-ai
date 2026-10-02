@@ -58,6 +58,39 @@ async def register(
     return _token_out(pair)
 
 
+@router.post("/demo", response_model=TokenOut)
+async def demo_session(
+    request: Request,
+    context: AppContext = Depends(get_context),
+    _: None = Depends(limit_login),
+) -> TokenOut:
+    pair = await context.auth.demo_login(request.headers.get("user-agent"))
+    return _token_out(pair)
+
+
+@router.get("/demo/status")
+async def demo_status(context: AppContext = Depends(get_context)) -> dict:
+    from sqlalchemy import select
+
+    from app.models.identity import Organization, Workspace
+    from app.seed.constants import DEMO_ORG_SLUG, DEMO_WORKSPACE_NAME, DEMO_WORKSPACE_SLUG
+
+    available = False
+    if context.settings.demo_seed_enabled:
+        async with context.sessions() as session:
+            row = await session.scalar(
+                select(Workspace.id)
+                .join(Organization, Organization.id == Workspace.organization_id)
+                .where(Organization.slug == DEMO_ORG_SLUG, Workspace.slug == DEMO_WORKSPACE_SLUG)
+            )
+            available = row is not None
+    return {
+        "available": available,
+        "workspace": DEMO_WORKSPACE_NAME,
+        "enabled": context.settings.demo_seed_enabled,
+    }
+
+
 @router.post("/login", response_model=TokenOut)
 async def login(
     body: LoginIn,

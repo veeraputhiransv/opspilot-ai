@@ -20,6 +20,7 @@ from app.api.deps import (
     require_viewer,
 )
 from app.identity.context import AuthContext
+from app.integrations.demo_data import scenario_catalog
 from app.policies.risk_policy import RiskPolicyService
 from app.runtime import AppContext
 from app.schemas.api import (
@@ -68,6 +69,42 @@ async def ingest_event(
     _: None = Depends(limit_ingest),
 ) -> JSONResponse:
     created = await context.events.ingest(body, auth)
+    status = 200 if created.replayed else 202
+    return JSONResponse(status_code=status, content=json.loads(created.model_dump_json()))
+
+
+@router.get("/demo/scenarios")
+async def demo_scenarios(
+    context: AppContext = Depends(get_context),
+    auth: AuthContext = Depends(require_operator),
+) -> list[dict]:
+    from app.seed.demo import require_demo_seed
+
+    require_demo_seed(context.settings)
+    if not auth.is_demo_workspace:
+        from app.core.errors import ForbiddenError
+
+        raise ForbiddenError("Incident scenarios are only available in the AcmeFlow demo workspace.")
+    return scenario_catalog()
+
+
+@router.post("/demo/scenarios/{key}/trigger", response_model=IncidentCreated, status_code=202)
+async def trigger_demo_scenario(
+    key: str,
+    context: AppContext = Depends(get_context),
+    auth: AuthContext = Depends(require_operator),
+    _: None = Depends(limit_ingest),
+) -> JSONResponse:
+    from app.core.errors import ForbiddenError, OpsPilotError
+    from app.seed.demo import require_demo_seed
+
+    require_demo_seed(context.settings)
+    if not auth.is_demo_workspace:
+        raise ForbiddenError("Incident scenarios are only available in the AcmeFlow demo workspace.")
+    match = next((item for item in scenario_catalog() if item["key"] == key), None)
+    if match is None:
+        raise OpsPilotError("Unknown demo scenario.")
+    created = await context.events.ingest(EventIn.model_validate(match["event"]), auth)
     status = 200 if created.replayed else 202
     return JSONResponse(status_code=status, content=json.loads(created.model_dump_json()))
 

@@ -26,6 +26,8 @@ export OPSPILOT_LOGIN_RATE_PER_MINUTE="${OPSPILOT_LOGIN_RATE_PER_MINUTE:-1000}"
 export OPSPILOT_INGEST_RATE_PER_MINUTE="${OPSPILOT_INGEST_RATE_PER_MINUTE:-1000}"
 export OPSPILOT_APPROVAL_RATE_PER_MINUTE="${OPSPILOT_APPROVAL_RATE_PER_MINUTE:-1000}"
 export OPSPILOT_TICKET_RATE_PER_MINUTE="${OPSPILOT_TICKET_RATE_PER_MINUTE:-1000}"
+export OPSPILOT_DEMO_SEED_ENABLED="${OPSPILOT_DEMO_SEED_ENABLED:-true}"
+export OPSPILOT_DEMO_PASSWORD="${OPSPILOT_DEMO_PASSWORD:-AcmeFlow-operator-12}"
 
 (
   cd "${ROOT}/backend"
@@ -33,6 +35,16 @@ export OPSPILOT_TICKET_RATE_PER_MINUTE="${OPSPILOT_TICKET_RATE_PER_MINUTE:-1000}
     .venv/bin/alembic upgrade head
   else
     alembic upgrade head
+  fi
+)
+(
+  cd "${ROOT}"
+  if [[ -x "${ROOT}/backend/.venv/bin/python" ]]; then
+    "${ROOT}/backend/.venv/bin/python" scripts/seed_demo.py
+    "${ROOT}/backend/.venv/bin/python" scripts/reset_demo.py
+  else
+    python scripts/seed_demo.py
+    python scripts/reset_demo.py
   fi
 )
 

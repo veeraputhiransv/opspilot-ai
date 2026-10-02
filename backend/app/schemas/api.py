@@ -79,6 +79,10 @@ class ActionOut(BaseModel):
     confidence: float
     arguments: dict
     result: dict | None
+    execution_id: UUID | None = None
+    provider_ref: str | None = None
+    executed_at: datetime | None = None
+    attempt_count: int = 0
 
 
 class ApprovalOut(BaseModel):
@@ -97,6 +101,8 @@ class ApprovalOut(BaseModel):
     evidence: list[str]
     proposed_arguments: dict
     created_at: datetime
+    decided_by: str | None = None
+    decided_at: datetime | None = None
 
 
 class ToolSummary(BaseModel):
@@ -126,6 +132,7 @@ class StepOut(BaseModel):
 class RunOut(BaseModel):
     id: UUID
     incident_id: UUID | None = None
+    graph_name: str = "incident_response"
     status: str
     model: str
     input_tokens: int

@@ -79,7 +79,7 @@ class DeterministicReasoner:
             ]
 
         scored = [
-            ("db_pool", "DB Connection Pool Exhaustion", *_score_pool(evidence)),
+            ("db_pool", _pool_hypothesis_title(evidence), *_score_pool(evidence)),
             ("stripe", "Stripe API Latency", *_score_stripe(evidence)),
             ("bad_deploy", "Bad Deployment", *_score_bad_deploy(evidence)),
             ("redis", "Redis Outage", *_score_redis(evidence)),
@@ -347,6 +347,14 @@ def _preventive(key: str) -> list[str]:
         "false_positive": ["Require the error rate to hold above the threshold for two windows."],
     }
     return table.get(key, ["Review the detector for this service."])
+
+
+def _pool_hypothesis_title(evidence: Evidence) -> str:
+    active, _previous = _versions(evidence.deployments)
+    version = str((active or {}).get("version") or "").strip()
+    if version:
+        return f"Database connection pool exhaustion after {version} deployment"
+    return "Database connection pool exhaustion"
 
 
 def _logs(evidence: Evidence) -> str:

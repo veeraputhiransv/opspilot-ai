@@ -36,6 +36,8 @@ from app.models.identity import (
     WorkspaceIncidentCounter,
     WorkspaceMember,
 )
+from app.seed.constants import DEMO_USER_EMAIL, DEMO_WORKSPACE_SLUG, is_demo_workspace
+from app.seed.demo import require_demo_seed
 
 _SLUG = re.compile(r"[^a-z0-9]+")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -168,6 +170,47 @@ class AuthService:
             )
             return pair
 
+    async def demo_login(self, user_agent: str | None) -> TokenPair:
+        require_demo_seed(self.settings)
+        async with session_scope(self.sessions) as session:
+            user = await session.scalar(select(User).where(User.email == DEMO_USER_EMAIL))
+            if user is None or user.status != "active":
+                raise ForbiddenError("The AcmeFlow demo workspace has not been seeded.")
+            membership = await session.scalar(
+                select(WorkspaceMember)
+                .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
+                .where(
+                    WorkspaceMember.user_id == user.id,
+                    Workspace.slug == DEMO_WORKSPACE_SLUG,
+                )
+            )
+            if membership is None:
+                raise ForbiddenError("The AcmeFlow demo workspace has not been seeded.")
+            workspace = await session.get(Workspace, membership.workspace_id)
+            if workspace is None:
+                raise ForbiddenError("The AcmeFlow demo workspace has not been seeded.")
+            pair = await self._issue(
+                session,
+                user,
+                workspace.organization_id,
+                workspace.id,
+                [membership.role],
+                user_agent,
+            )
+            session.add(
+                AuditLog(
+                    organization_id=workspace.organization_id,
+                    workspace_id=workspace.id,
+                    actor_user_id=user.id,
+                    actor_type="jwt",
+                    actor=user.email,
+                    action="demo_session_started",
+                    resource_type="user",
+                    resource_id=user.id,
+                )
+            )
+            return pair
+
     async def refresh(self, raw_token: str, user_agent: str | None) -> TokenPair:
         token_hash = hash_refresh_token(raw_token)
         async with session_scope(self.sessions) as session:
@@ -258,10 +301,19 @@ class AuthService:
                     .where(WorkspaceMember.user_id == user_id)
                 )
             ).all()
+            demo = any(
+                is_demo_workspace(
+                    next((org.slug for _member, org in org_rows if org.id == workspace.organization_id), None),
+                    workspace.slug,
+                )
+                for _member, workspace in ws_rows
+            )
             return {
                 "id": str(user.id),
                 "email": user.email,
                 "full_name": user.full_name,
+                "title": "Incident Commander" if user.email == DEMO_USER_EMAIL else None,
+                "demo": demo,
                 "organizations": [
                     {
                         "id": str(org.id),
@@ -305,7 +357,9 @@ class AuthService:
                     WorkspaceMember.workspace_id == workspace_id,
                 )
             )
-            if user is None or user.status != "active" or membership is None:
+            workspace = await session.get(Workspace, workspace_id)
+            organization = await session.get(Organization, organization_id)
+            if user is None or user.status != "active" or membership is None or workspace is None:
                 raise UnauthorizedError("Access token is invalid or expired.")
             return AuthContext(
                 user_id=user_id,
@@ -314,6 +368,10 @@ class AuthService:
                 roles=(membership.role,),
                 actor_label=user.email,
                 via="jwt",
+                is_demo_workspace=is_demo_workspace(
+                    organization.slug if organization else None,
+                    workspace.slug,
+                ),
             )
 
     async def context_from_api_key(self, raw_key: str) -> AuthContext:
@@ -331,6 +389,7 @@ class AuthService:
             workspace = await session.get(Workspace, row.workspace_id)
             if workspace is None:
                 raise UnauthorizedError("API key is invalid.")
+            organization = await session.get(Organization, workspace.organization_id)
             row.last_used_at = utcnow()
             return AuthContext(
                 user_id=None,
@@ -339,9 +398,15 @@ class AuthService:
                 roles=("operator",),
                 actor_label=f"api-key:{row.key_prefix}",
                 via="api_key",
+                is_demo_workspace=is_demo_workspace(
+                    organization.slug if organization else None,
+                    workspace.slug,
+                ),
             )
 
     async def create_ingest_key(self, auth: AuthContext, name: str) -> str:
+        if auth.is_demo_workspace:
+            raise ForbiddenError("Demo sessions cannot create ingest keys.")
         if "admin" not in auth.roles:
             raise ForbiddenError("Only workspace admins can create ingest keys.")
         raw = f"ops_live_{token_urlsafe(32)}"
@@ -395,6 +460,8 @@ class AuthService:
             ]
 
     async def revoke_ingest_key(self, auth: AuthContext, key_id: UUID) -> None:
+        if auth.is_demo_workspace:
+            raise ForbiddenError("Demo sessions cannot revoke ingest keys.")
         if "admin" not in auth.roles:
             raise ForbiddenError("Only workspace admins can revoke ingest keys.")
         async with session_scope(self.sessions) as session:

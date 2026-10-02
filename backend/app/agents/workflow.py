@@ -1067,6 +1067,7 @@ class IncidentWorkflow:
             mode=self.settings.mode,
             incident_id=incident.id,
             workspace_id=incident.workspace_id,
+            incident_number=incident.incident_number,
             scenario_key=incident.scenario_key,
             service=incident.service,
             environment=incident.environment,

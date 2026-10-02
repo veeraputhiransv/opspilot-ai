@@ -399,6 +399,10 @@ class QueryService:
                     confidence=item.confidence,
                     arguments=dict(item.arguments or {}),
                     result=dict(item.result) if item.result else None,
+                    execution_id=item.execution_id,
+                    provider_ref=item.provider_ref,
+                    executed_at=item.executed_at,
+                    attempt_count=item.attempt_count,
                 )
                 for item in actions
             ],
@@ -473,6 +477,8 @@ def _approval(request: ApprovalRequest, incident: Incident) -> ApprovalOut:
         evidence=list(request.evidence or []),
         proposed_arguments=dict(request.proposed_arguments or {}),
         created_at=request.created_at,
+        decided_by=request.decided_by,
+        decided_at=request.decided_at,
     )
 
 
@@ -558,6 +564,7 @@ def _runs(
             RunOut(
                 id=run.id,
                 incident_id=run.incident_id,
+                graph_name=run.graph_name,
                 status=run.status,
                 model=run.model,
                 input_tokens=run.input_tokens,

@@ -88,7 +88,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <aside className="border-b border-line bg-surface md:min-h-screen md:border-b-0 md:border-r">
         <div className="flex items-center justify-between px-5 py-5">
           <Link href="/dashboard" className="block">
-            <div className="text-sm font-semibold tracking-wide">OpsPilot</div>
+            <div className="text-sm font-semibold tracking-wide">OpsPilot AI</div>
             <div className="text-xs text-muted">Incident response</div>
           </Link>
           <button
@@ -118,7 +118,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </select>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:block md:space-y-1 md:px-3">
-          {NAV.map((item) => {
+          {NAV.filter((item) => item.href !== "/audit" || workspace?.role === "admin").map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const Icon = item.icon;
             return (
@@ -147,7 +147,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <div className="hidden border-t border-line px-5 py-4 md:block">
           <p className="truncate text-sm">{me?.full_name}</p>
-          <p className="truncate text-xs text-muted">{me?.email}</p>
+          <p className="truncate text-xs text-muted">{me?.title ?? me?.email}</p>
+          {me?.demo ? <p className="mt-1 text-xs text-muted">Restricted demo session</p> : null}
           <button
             type="button"
             onClick={() => void logout()}

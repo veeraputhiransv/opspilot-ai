@@ -1,4 +1,9 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
 import { expect, type APIResponse, type Page } from "@playwright/test";
+
+const REPO_ROOT = path.join(__dirname, "../..");
 
 export const API_URL = process.env.E2E_API_URL ?? "http://127.0.0.1:8000";
 export const PASSWORD = "correct-horse-battery";
@@ -10,9 +15,11 @@ export interface IncidentDetail {
   current_activity: string | null;
   hypotheses: Array<{ title: string; is_primary: boolean }>;
   evidence: { items?: unknown[]; logs?: unknown[] } | null;
+  timeline: Array<{ id: string; title: string }>;
   actions: Array<{ tool_name: string; status: string; result: Record<string, unknown> | null }>;
-  approvals: Array<{ id: string; status: string; tool_name: string }>;
+  approvals: Array<{ id: string; status: string; tool_name: string; title: string }>;
   rca: { executive_summary: string; root_cause: string; version: number } | null;
+  agent_runs?: Array<{ id: string; status: string; steps: unknown[] }>;
 }
 
 export function uniqueSuffix(): string {
@@ -109,6 +116,31 @@ export async function rejectPendingApprovals(page: Page, incidentId: string): Pr
       await reject.click();
     }
     return false;
+  });
+}
+
+export function evidenceCount(incident: IncidentDetail): number {
+  const evidence = incident.evidence;
+  if (!evidence) return 0;
+  return (evidence.items?.length ?? 0) + (evidence.logs?.length ?? 0);
+}
+
+export function hasPendingRollback(incident: IncidentDetail): boolean {
+  return incident.approvals.some(
+    (item) => item.tool_name === "rollback_deployment" && item.status === "PENDING_APPROVAL",
+  );
+}
+
+export function rollbackAction(incident: IncidentDetail) {
+  return incident.actions.find((item) => item.tool_name === "rollback_deployment");
+}
+
+export function resetDemo(): void {
+  const python = process.env.OPSPILOT_PYTHON ?? path.join(REPO_ROOT, "backend/.venv/bin/python");
+  execFileSync(python, [path.join(REPO_ROOT, "scripts/reset_demo.py")], {
+    cwd: REPO_ROOT,
+    env: process.env,
+    stdio: "inherit",
   });
 }
 

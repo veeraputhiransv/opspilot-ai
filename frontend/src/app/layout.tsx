@@ -20,7 +20,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "OpsPilot AI",
-  description: "Autonomous incident response and operations platform",
+  description: "AI-powered incident investigation with human-controlled remediation.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

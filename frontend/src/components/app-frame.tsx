@@ -6,7 +6,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import { Shell } from "@/components/shell";
 import { StreamProvider } from "@/components/stream";
 
-const PUBLIC = new Set(["/login", "/register"]);
+const PUBLIC = new Set(["/", "/login", "/register", "/architecture"]);
 
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

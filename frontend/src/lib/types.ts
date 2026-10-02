@@ -46,6 +46,10 @@ export interface IncidentAction {
   confidence: number;
   arguments: Record<string, string | number | boolean>;
   result: Record<string, unknown> | null;
+  execution_id?: string | null;
+  provider_ref?: string | null;
+  executed_at?: string | null;
+  attempt_count?: number;
 }
 
 export interface Approval {
@@ -64,6 +68,8 @@ export interface Approval {
   evidence: string[];
   proposed_arguments: Record<string, string | number | boolean>;
   created_at: string;
+  decided_by?: string | null;
+  decided_at?: string | null;
 }
 
 export interface ToolSummary {
@@ -93,6 +99,7 @@ export interface AgentStep {
 export interface AgentRun {
   id: string;
   incident_id: string | null;
+  graph_name?: string;
   status: string;
   model: string;
   input_tokens: number;
@@ -251,6 +258,8 @@ export interface Me {
   id: string;
   email: string;
   full_name: string;
+  title?: string | null;
+  demo?: boolean;
   workspaces: Array<{
     id: string;
     organization_id: string;

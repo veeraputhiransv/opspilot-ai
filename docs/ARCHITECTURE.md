@@ -176,7 +176,49 @@ Approvals use `SELECT … FOR UPDATE` so two operators cannot both approve.
 - All incident and knowledge rows are workspace-scoped
 - LLM provider protocol (OpenAI, Anthropic, Gemini, Ollama) for **narrative and optional synthesis only** unless a future flag explicitly allows more
 - Audit and observability always recorded, including identity of the actor
-- Seeded LinkedIn demo workspace is phase 23, not the default runtime
+- Seeded LinkedIn demo workspace is opt-in via `OPSPILOT_DEMO_SEED_ENABLED` and `scripts/seed_demo.py`. It is not the default runtime.
+
+---
+
+## Current runtime diagram
+
+```mermaid
+flowchart LR
+  Browser --> Next[Next.js]
+  Next --> API[FastAPI]
+  API --> Auth[Auth / RBAC]
+  API --> Ingest[Event ingestion]
+  API --> Graph[LangGraph]
+  Graph --> Policy[Policy engine]
+  Graph --> Tools[Tool layer]
+  Tools --> Resolver[Integration resolver]
+  Resolver --> GitHub
+  Resolver --> Slack
+  Resolver --> Email
+  Resolver --> Logs
+  Resolver --> Deploy[Deployment provider]
+  Graph --> Human[Human approval]
+  API --> PG[(PostgreSQL + pgvector)]
+  API --> Redis[(Redis)]
+```
+
+```mermaid
+flowchart TD
+  A[Event] --> B[Triage]
+  B --> C[Log analysis]
+  C --> D[Deployment correlation]
+  D --> E[Source control]
+  E --> F[Historical search]
+  F --> G[Hypothesis]
+  G --> H[Action plan]
+  H --> I[Risk policy]
+  I --> J{High risk?}
+  J -->|Yes| K[Human approval]
+  K --> L[Execution]
+  J -->|No| L
+  L --> M[RCA]
+```
+
 
 ---
 

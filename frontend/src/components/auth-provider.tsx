@@ -28,7 +28,7 @@ const AuthContext = createContext<AuthState>({
   logout: async () => undefined,
 });
 
-const PUBLIC = new Set(["/login", "/register"]);
+const PUBLIC = new Set(["/", "/login", "/register", "/architecture"]);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

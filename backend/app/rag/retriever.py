@@ -35,22 +35,28 @@ def retrieval_query(*, message: str, service: str, logs: list[dict], commits: li
 
 
 async def search_similar(
-    session: AsyncSession, query: str, limit: int, workspace_id: UUID
+    session: AsyncSession,
+    query: str,
+    limit: int,
+    workspace_id: UUID,
+    exclude_external_id: str | None = None,
 ) -> list[dict]:
     literal = vector_literal(embed(query))
-    sql = """
+    exclude = "AND d.external_id <> :exclude_external_id" if exclude_external_id else ""
+    sql = f"""
             SELECT d.external_id, d.title, d.service, d.symptoms, d.root_cause, d.resolution,
                    1 - (e.embedding <=> CAST(:query AS vector)) AS similarity
             FROM knowledge_documents AS d
             JOIN incident_embeddings AS e ON e.document_id = d.id
             WHERE d.workspace_id = :workspace_id
+            {exclude}
             ORDER BY e.embedding <=> CAST(:query AS vector)
             LIMIT :limit
             """
-    result = await session.execute(
-        text(sql),
-        {"query": literal, "limit": limit, "workspace_id": workspace_id},
-    )
+    params: dict = {"query": literal, "limit": limit, "workspace_id": workspace_id}
+    if exclude_external_id:
+        params["exclude_external_id"] = exclude_external_id
+    result = await session.execute(text(sql), params)
     rows = []
     for row in result.mappings():
         item = dict(row)

@@ -35,6 +35,8 @@ services:
       OPSPILOT_STEP_DELAY_MS: "700"
       OPSPILOT_JWT_SECRET: dev-only-change-me-use-32-plus-bytes
       OPSPILOT_ENV: development
+      OPSPILOT_DEMO_SEED_ENABLED: "true"
+      OPSPILOT_DEMO_PASSWORD: AcmeFlow-operator-12
     ports:
       - "8000:8000"
     depends_on:

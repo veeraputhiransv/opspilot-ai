@@ -1,1 +1,1 @@
-"""Idempotent demo seed."""
+"""Opt-in demo workspace seed. Never runs unless explicitly enabled."""

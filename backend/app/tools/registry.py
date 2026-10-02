@@ -39,6 +39,7 @@ class ToolContext:
     mode: str
     incident_id: UUID
     workspace_id: UUID
+    incident_number: str
     scenario_key: str
     service: str
     environment: str
@@ -243,7 +244,11 @@ async def _previous(args: BaseModel, ctx: ToolContext) -> ToolResult:
         try:
             async with ctx.session.begin_nested():
                 rows = await search_similar(
-                    ctx.session, payload.query, payload.limit, ctx.workspace_id
+                    ctx.session,
+                    payload.query,
+                    payload.limit,
+                    ctx.workspace_id,
+                    exclude_external_id=ctx.incident_number or None,
                 )
             if rows:
                 top = rows[0]

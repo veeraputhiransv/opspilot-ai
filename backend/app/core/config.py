@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     refresh_token_days: int = 14
     stream_ticket_seconds: int = 90
     bootstrap_enabled: bool = False
+    demo_seed_enabled: bool = False
+    demo_password: str = "AcmeFlow-operator-12"
     api_key: str = ""
     rate_limit_per_minute: int = 60
     login_rate_per_minute: int = 20

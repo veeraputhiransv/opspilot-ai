@@ -16,8 +16,8 @@ def scenario_catalog() -> list[dict]:
     return [
         {
             "key": "db_pool",
-            "label": "Database connection pool exhaustion",
-            "summary": "Payment API error rate spikes just after a pool change.",
+            "label": "Payment API degradation",
+            "summary": "Simulate a production error-rate spike immediately following a payment-service deployment.",
             "event": {
                 "service": "payment-service",
                 "environment": "production",
@@ -101,7 +101,7 @@ def detect_scenario(event: dict) -> str:
 
 def scenario_title(key: str) -> str:
     titles = {
-        "db_pool": "Payment API error spike",
+        "db_pool": "Payment API Error Rate Spike",
         "stripe": "Stripe upstream latency",
         "bad_deploy": "Charge validation regression",
         "redis": "Redis dependency outage",
@@ -137,7 +137,7 @@ def _pool(started_at: datetime) -> dict:
             _deploy("v2.8.0", "previous", started_at - timedelta(days=3), "c12aa90", "Maya Chen"),
         ],
         "commits": [
-            _commit("f39a812", "Refactor payment connection pool", "Maya Chen", started_at - timedelta(hours=2), ["src/db/pool.ts"]),
+            _commit("f39a812", "refactor: tune payment database connection pool", "Maya Chen", started_at - timedelta(hours=2), ["src/db/pool.ts"]),
             _commit("a91c003", "Increase DB query timeout", "Maya Chen", started_at - timedelta(hours=5), ["src/db/client.ts"]),
             _commit("77bc12e", "Update Stripe retry configuration", "Jon Ellis", started_at - timedelta(days=9), ["src/stripe/retry.ts"]),
         ],
