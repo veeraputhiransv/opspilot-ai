@@ -16,11 +16,16 @@ Most “AI ops” demos either fake the investigation or let a model call tools 
 
 ## Demo
 
-[Animated GIF/video placeholder — record the 60–90s LinkedIn path after seeding AcmeFlow.]
+The 60–90 second walkthrough has not been published yet. Record it from the seeded AcmeFlow path; do not invent a video link here.
+
+▶ Watch the 90-second demo — *URL added after the recording is uploaded.*
+
+Recording notes: [docs/showcase/RECORDING_RUNBOOK.md](docs/showcase/RECORDING_RUNBOOK.md). Script and captions: [DEMO_SCRIPT.md](docs/showcase/DEMO_SCRIPT.md), [VIDEO_CAPTIONS.md](docs/showcase/VIDEO_CAPTIONS.md).
 
 ```bash
 export OPSPILOT_DEMO_SEED_ENABLED=true
 python scripts/seed_demo.py
+python scripts/reset_demo.py
 ```
 
 Open the console, click **Try Demo**, then **Run Incident Scenario**. That path uses the same ingest → graph → approval → execution → RCA pipeline as a registered workspace.
@@ -114,7 +119,7 @@ Multi-tenant workspace isolation · RAG over prior incidents · LangGraph orches
 
 GitHub Actions on `main` runs backend lint/types/migrate/pytest, frontend typecheck/lint, and Playwright against PostgreSQL + Redis + FastAPI + Next.js.
 
-Snapshot from the `v0.1.0-core` baseline: backend **51** pytest cases and **3** Playwright scenarios (approve, reject, workspace isolation). Counts can move; CI is the source of truth.
+Snapshot from the `v0.1.0-core` baseline: backend **51** pytest cases and **3** Playwright scenarios (approve, reject, workspace isolation). `main` also runs the AcmeFlow demo showcase. Screenshot capture is opt-in (`CAPTURE_SCREENSHOTS=1`). Counts can move; CI is the source of truth.
 
 ## Local Setup
 

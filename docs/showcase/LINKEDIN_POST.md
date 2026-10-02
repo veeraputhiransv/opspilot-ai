@@ -1,54 +1,50 @@
-# LinkedIn assets (do not publish automatically)
+# LinkedIn and GitHub launch copy
 
-## Project title
+Do not publish or change repository visibility from this file. Apply GitHub About/topics in the GitHub UI after the repo is public.
+
+## GitHub About
+
+**Description**
+
+AI incident-response platform with evidence-driven investigation, LangGraph orchestration, deterministic risk policy, human approval, and resumable remediation workflows.
+
+**Topics**
+
+`ai-agents` `langgraph` `fastapi` `nextjs` `rag` `incident-response` `human-in-the-loop` `agentic-ai` `observability` `postgresql` `redis` `llm`
+
+**Website**
+
+Add only after a public demo URL exists.
+
+## Final LinkedIn post
+
+What happens when you let an AI agent investigate a production incident — but refuse to let it blindly execute dangerous actions?
+
+That question is why I built OpsPilot AI.
+
+Most agent demos either fake the investigation or let a model call production tools with too much trust. I wanted the opposite: a real, persisted incident workflow where the agent can investigate, and a human still owns dangerous mutations.
+
+A payment-service error-rate spike becomes an incident in Postgres. LangGraph correlates logs, the latest deploy, a Git commit, and similar historical incidents via RAG. Deterministic policy — not the model — marks rollback HIGH. The graph pauses on a human approval row. After I approve, the same workflow resumes, executes idempotently, resolves the incident, and writes an RCA from stored facts.
+
+The engineering I cared about:
+
+- event-driven investigation, not a chatbot
+- evidence correlation before a hypothesis
+- policy-as-code for risk
+- resumable HITL, not a hidden tool loop
+- multi-tenant isolation, vaulted secrets, agent-run observability
+- evaluation plus Playwright E2E on GitHub-hosted runners (approve, reject, isolation, demo path)
+
+Stack: LangGraph, FastAPI, Next.js, PostgreSQL/pgvector, Redis.
+
+What I learned: the hard part is not “call a model.” It is making investigation, approval, and execution the same durable path in tests as in the demo.
+
+60–90s demo: [add the LinkedIn / video URL after upload]
+
+GitHub: https://github.com/veeraputhiransv/opspilot-ai
+
+If you have built agent workflows that have to pause for a human, I want the technical feedback — especially on policy boundaries and recovery.
+
+## Title / hook (profile or repo)
 
 OpsPilot AI — incident investigation with human-controlled remediation
-
-## One-line hook
-
-What happens when an AI agent can investigate a production incident—but cannot roll back without a human?
-
-## GitHub description
-
-Authenticated multi-tenant incident response: LangGraph investigation, evidence correlation, deterministic policy, HITL approval, and Playwright-proven E2E.
-
-## GitHub topics
-
-`incident-response` `langgraph` `fastapi` `nextjs` `postgresql` `redis` `rag` `human-in-the-loop` `observability` `playwright`
-
-## Short post
-
-I built OpsPilot AI to answer a specific engineering question: can an agent investigate a real production incident without being trusted to execute dangerous actions?
-
-It ingests an alert, correlates logs, deploys, commits, and prior incidents, then pauses a HIGH-risk rollback until a human approves. The approval is a Postgres row. The UI cannot fake it.
-
-Repo stays private until the final review. Demo video coming next.
-
-## Detailed post
-
-Most AI agent demos skip the hard part.
-
-Either the investigation is scripted theater, or the agent is allowed to call production tools with too much trust.
-
-OpsPilot AI is an incident-response control plane:
-
-Detect → Investigate → Explain → Approve → Resolve
-
-A payment-service error-rate spike becomes a persisted incident. LangGraph collects logs, the deploy 43 seconds earlier, commit `f39a812`, and historical incident INC-0087. Policy code marks rollback HIGH. A human named Alex Morgan approves. The adapter executes. RCA is written.
-
-The interesting engineering is not “an agent that talks.” It is:
-
-- multi-tenant workspace isolation
-- RAG over prior incidents
-- deterministic risk policy
-- human approval as data
-- idempotent execution
-- workflow recovery
-- agent observability without hidden chain-of-thought
-- Playwright E2E on GitHub-hosted runners
-
-This is a portfolio system, not a claim of an enterprise SaaS rollout.
-
-## Technology list
-
-Next.js, TypeScript, FastAPI, SQLAlchemy, Alembic, LangGraph, PostgreSQL, pgvector, Redis, SSE, Docker, GitHub Actions, pytest, Playwright

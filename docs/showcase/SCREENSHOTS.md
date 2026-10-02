@@ -23,3 +23,5 @@ CAPTURE_SCREENSHOTS=1 bash scripts/run-e2e.sh e2e/capture-screenshots.spec.ts
 ```
 
 The capture spec resets again, waits on persisted incident state, and targets the `rollback_deployment` card only.
+
+For a 60–90s screen recording, reset first and follow [RECORDING_RUNBOOK.md](RECORDING_RUNBOOK.md). Do not commit the raw video.
