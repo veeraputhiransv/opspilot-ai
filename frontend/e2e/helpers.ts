@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import { expect, type APIResponse, type Page } from "@playwright/test";
@@ -136,7 +137,8 @@ export function rollbackAction(incident: IncidentDetail) {
 }
 
 export function resetDemo(): void {
-  const python = process.env.OPSPILOT_PYTHON ?? path.join(REPO_ROOT, "backend/.venv/bin/python");
+  const venvPython = path.join(REPO_ROOT, "backend/.venv/bin/python");
+  const python = process.env.OPSPILOT_PYTHON ?? (existsSync(venvPython) ? venvPython : "python3");
   execFileSync(python, [path.join(REPO_ROOT, "scripts/reset_demo.py")], {
     cwd: REPO_ROOT,
     env: process.env,

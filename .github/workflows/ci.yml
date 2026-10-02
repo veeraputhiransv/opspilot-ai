@@ -123,6 +123,7 @@ jobs:
       OPSPILOT_TICKET_RATE_PER_MINUTE: "1000"
       OPSPILOT_DEMO_SEED_ENABLED: "true"
       OPSPILOT_DEMO_PASSWORD: AcmeFlow-operator-12
+      OPSPILOT_PYTHON: python3
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
